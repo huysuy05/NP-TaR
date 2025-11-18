@@ -1,6 +1,9 @@
+import glob
 import json
 import os
-from typing import Any, Dict, Iterable, List, Optional
+import re
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -37,6 +40,33 @@ def save_results_json(
     with open(path, "w") as f:
         json.dump(list(results), f, indent=2, default=_json_default)
     return path
+
+
+def load_results_from_files(patterns: Sequence[str]) -> List[Dict[str, Any]]:
+    matched: List[str] = []
+    for pattern in patterns:
+        matched.extend(glob.glob(pattern))
+
+    unique_paths = sorted({Path(path).as_posix() for path in matched})
+    results: List[Dict[str, Any]] = []
+
+    for path in unique_paths:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+
+        def _ingest(entry: Dict[str, Any]):
+            enriched = dict(entry)
+            enriched.setdefault("_source", path)
+            results.append(enriched)
+
+        if isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, dict):
+                    _ingest(item)
+        elif isinstance(payload, dict):
+            _ingest(payload)
+
+    return results
 
 
 def _prepare_entries(
@@ -140,3 +170,114 @@ def plot_task_leaderboards(
         plots.append(path)
 
     return plots
+
+
+def _tokenize_name(name: str) -> Set[str]:
+    return {token for token in re.split(r"[/_\\.\-]+", name.lower()) if token}
+
+
+def _build_base_catalog(results: Sequence[Dict[str, Any]]) -> List[Tuple[str, str]]:
+    catalog: List[Tuple[str, str]] = []
+    for res in results:
+        raw_model = str(res.get("model", "model"))
+        if "checkpoints" in raw_model:
+            continue
+        display_name = str(res.get("model_display_name", raw_model))
+        catalog.append((display_name, raw_model))
+    return catalog
+
+
+def _infer_base_display(checkpoint_model: str, catalog: Sequence[Tuple[str, str]]) -> Optional[str]:
+    checkpoint_tokens = _tokenize_name(Path(checkpoint_model).name)
+    best_display: Optional[str] = None
+    best_overlap = 0
+    for display_name, raw_model in catalog:
+        candidate_tokens = _tokenize_name(raw_model)
+        overlap = len(checkpoint_tokens & candidate_tokens)
+        if overlap > best_overlap and overlap > 0:
+            best_display = display_name
+            best_overlap = overlap
+    return best_display
+
+
+def _resolve_display_name(result: Dict[str, Any], catalog: Sequence[Tuple[str, str]], include_task: bool) -> str:
+    task = str(result.get("task", "task"))
+    if "model_display_name" in result:
+        base_label = str(result["model_display_name"])
+    else:
+        raw_model = str(result.get("model", "model"))
+        if "checkpoints" in raw_model or "tarp" in raw_model.lower():
+            inferred = _infer_base_display(raw_model, catalog)
+            if inferred:
+                base_label = f"{inferred}-tarp" if not inferred.endswith("-tarp") else inferred
+            else:
+                base_label = Path(raw_model).name
+        else:
+            base_label = raw_model
+
+    if include_task:
+        return f"{base_label} ({task})"
+    return base_label
+
+
+def plot_metric_grid(
+    results: Sequence[Dict[str, Any]],
+    output_path: str = "docs/models_leaderboard.png",
+    metrics: Optional[Sequence[Tuple[str, str]]] = None,
+) -> Optional[str]:
+    if not results:
+        return None
+
+    if metrics is None:
+        metrics = [
+            ("accuracy_test", "Accuracy"),
+            ("nrs_overall", "Null Risk Score"),
+            ("dcb_overall", "Default Class Bias"),
+            ("null_entropy_overall", "Null Entropy"),
+        ]
+
+    os.makedirs(Path(output_path).parent, exist_ok=True)
+
+    tasks = {str(res.get("task", "task")) for res in results}
+    include_task = len(tasks) > 1
+    base_catalog = _build_base_catalog(results)
+
+    labels = []
+    for res in results:
+        labels.append(_resolve_display_name(res, base_catalog, include_task))
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True)
+    axes = axes.flatten()
+
+    for idx, (metric_key, title) in enumerate(metrics):
+        ax = axes[idx]
+        metric_labels: List[str] = []
+        metric_values: List[float] = []
+        for label, res in zip(labels, results):
+            if metric_key in res:
+                metric_labels.append(label)
+                metric_values.append(float(res[metric_key]))
+
+        if not metric_values:
+            ax.set_visible(False)
+            continue
+
+        order = np.argsort(metric_values)[::-1]
+        ordered_values = [metric_values[i] for i in order]
+        ordered_labels = [metric_labels[i] for i in order]
+        positions = np.arange(len(ordered_labels))
+
+        ax.bar(positions, ordered_values, color="#4c72b0")
+        ax.set_xticks(positions)
+        ax.set_xticklabels(ordered_labels, rotation=35, ha="right")
+        ax.set_ylabel(title)
+        ax.set_title(title)
+        ax.grid(axis="y", alpha=0.2, linestyle="--")
+
+        for pos, value in zip(positions, ordered_values):
+            ax.text(pos, value, f"{value:.3f}", ha="center", va="bottom", fontsize=8)
+
+    fig.suptitle("Model Leaderboard", fontsize=16)
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+    return output_path

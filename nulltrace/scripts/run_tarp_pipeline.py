@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import glob
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Sequence, Set
 
@@ -14,7 +15,18 @@ from ..utils.io import stream_jsonl, write_jsonl
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the TaRP data pipeline.")
-    parser.add_argument("--results", nargs="+", required=True, help="NullBench result JSON files")
+    parser.add_argument(
+        "--results",
+        nargs="+",
+        default=[],
+        help="Paths to NullBench result JSON files (accepts glob patterns)",
+    )
+    parser.add_argument(
+        "--results-glob",
+        action="append",
+        dest="results_glob",
+        help="Additional glob patterns for NullBench result JSON files",
+    )
     parser.add_argument("--corpus", required=True, help="Path to the pre-training corpus in JSONL format")
     parser.add_argument("--output-dir", default="experiments/tarp", help="Where to store trace artifacts")
     parser.add_argument("--text-key", default="text", help="Field that contains document text")
@@ -27,7 +39,37 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-weight", type=float, default=1.0, help="Maximum sampling weight")
     parser.add_argument("--minority-label", action="append", dest="minority_labels", help="Labels to upsample")
     parser.add_argument("--minority-bonus", type=float, default=0.25, help="Upsampling multiplier for minority labels")
+    parser.add_argument(
+        "--task",
+        default=None,
+        help="If set, only use NullBench results for this task when inferring label tokens",
+    )
     return parser.parse_args()
+
+
+def resolve_result_paths(paths: Sequence[str], glob_patterns: Sequence[str] | None) -> List[str]:
+    resolved: List[str] = []
+    for candidate in paths:
+        matches = glob.glob(candidate)
+        if matches:
+            resolved.extend(matches)
+        else:
+            resolved.append(candidate)
+
+    if glob_patterns:
+        for pattern in glob_patterns:
+            resolved.extend(glob.glob(pattern))
+
+    # Deduplicate while preserving order
+    seen: Set[str] = set()
+    ordered: List[str] = []
+    for path in resolved:
+        norm = str(Path(path))
+        if norm in seen:
+            continue
+        seen.add(norm)
+        ordered.append(norm)
+    return ordered
 
 
 def load_results(paths: Sequence[str]) -> List[Mapping[str, object]]:
@@ -91,7 +133,15 @@ def traces_to_dicts(traces: Sequence[DocumentTrace]) -> List[Mapping[str, object
 
 def main() -> None:
     args = parse_args()
-    results = load_results(args.results)
+    result_paths = resolve_result_paths(args.results, args.results_glob)
+    if not result_paths:
+        raise ValueError("No NullBench result files matched --results/--results-glob inputs")
+
+    results = load_results(result_paths)
+    if args.task:
+        results = [record for record in results if record.get("task") == args.task]
+        if not results:
+            raise ValueError(f"No NullBench results matched task '{args.task}'")
     task_label_map = extract_default_labels(results)
 
     if args.label_tokens:

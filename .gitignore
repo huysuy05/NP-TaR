@@ -1,1 +1,91 @@
+# Virtual Environments
 myenv
+venv/
+env/
+ENV/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Model checkpoints and outputs
+checkpoints/
+outputs/
+runs/
+logs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Data files
+data/
+datasets/
+*.csv
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Misc
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+experiments/

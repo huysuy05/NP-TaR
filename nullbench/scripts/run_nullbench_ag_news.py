@@ -6,6 +6,7 @@ from nullbench.generators.empty import generate_empty_inputs
 from nullbench.generators.low_signal import generate_low_signal
 from nullbench.generators.noise import generate_noise_inputs
 from nullbench.generators.placeholder import generate_placeholders
+from nullbench.plotting.leaderboard import load_results_from_files, plot_metric_grid
 from nullbench.scripts.decoder_eval_utils import (
     build_answer_token_ids,
     build_decoder_predict_fn,
@@ -33,12 +34,18 @@ def parse_args():
         default=4,
         help="Batch size for decoder forward passes",
     )
+    parser.add_argument(
+        "--display-name",
+        default=None,
+        help="Optional label stored in the results JSON for plotting/leaderboards",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     model_name = args.model_name
+    display_name = args.display_name or model_name
 
     print("\n" + "=" * 60)
     print(f"NULLBENCH EVALUATION: {model_name} on AG News")
@@ -75,6 +82,7 @@ def main():
     bench = NullBench(task, generators, abstention_threshold=0.3)
     scores = bench.evaluate(predict_proba_fn)
     scores["model"] = model_name
+    scores["model_display_name"] = display_name
 
     print("\n" + "=" * 60)
     print("RESULTS")
@@ -89,6 +97,14 @@ def main():
     with open(output_file, "w") as f:
         json.dump(scores, f, indent=2)
     print(f"\n✅ Results saved to: {output_file}")
+
+    # Auto-refresh dataset leaderboard plot
+    result_records = load_results_from_files(["experiments/*_results.json"])
+    task_results = [record for record in result_records if record.get("task") == task.name]
+    if task_results:
+        leaderboard_path = f"docs/{task.name}_leaderboard.png"
+        plot_metric_grid(task_results, output_path=leaderboard_path)
+        print(f"📊 Leaderboard updated: {leaderboard_path}")
 
 
 if __name__ == "__main__":
