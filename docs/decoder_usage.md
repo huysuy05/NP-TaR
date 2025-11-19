@@ -50,7 +50,7 @@ python -m nullbench.scripts.run_nullbench_hatexplain \
 
 - Uses the same decoder-only instruction stack (“You are moderating an online forum…”) so
   the logits come from the answer letters `" A"/" B"/" C"`.
-- Results are stored under `experiments/*_hatexplain_<split>_results.json` and automatically
+- Results are stored under `experiments/hateXplain/*_hatexplain_<split>_results.json` and automatically
   refresh `docs/hatexplain_leaderboard.png` so every past run stays visible.
 
 ## SST-2 (GLUE) Evaluation
@@ -65,7 +65,7 @@ python -m nullbench.scripts.run_nullbench_sst2 \
 ```
 
 - Instruction prompt frames the sample as a movie review and expects only the choice letter.
-- Outputs land in `experiments/*_sst2_<split>_results.json` and trigger
+- Outputs land in `experiments/sst2/*_sst2_<split>_results.json` and trigger
   `docs/sst2_leaderboard.png` updates after each evaluation.
 
 > **Note:** All dataset scripts accept `--display-name`, letting you label fine-tuned checkpoints

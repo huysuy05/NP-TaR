@@ -1,0 +1,69 @@
+Trace-and-Reweight Decoder Alignment: NullBench-Guided Mitigation for Instruction Models
+=========================================================================================
+
+NP-TaR Project Notes — November 18, 2025
+
+Abstract
+--------
+Instruction-tuned decoder-only language models often collapse onto a dominant class when fed low-signal inputs. NullBench exposes this via metrics such as default-class bias (DCB) and Null Risk Score (NRS), yet converting those diagnostics into actionable mitigation remains challenging. We describe a practical pipeline—Trace-and-Reweight Pretraining (TaRP)—that links NullBench evaluations to targeted corpus reweighting and fine-tuning. Applying TaRP to AG News, HateXplain, and SST-2 with Gemma models improves robustness (higher NRS, lower DCB) without sacrificing task accuracy.
+
+1. Introduction
+---------------
+Instruction-tuned causal LMs, including the Gemma family, generally perform well on fully specified prompts but tend to default to a single label when inputs lack discriminative features. This default-class collapse poses reliability and fairness concerns. NullBench introduced generator-based probes and metrics (DCB, entropy, NRS) to quantify the issue, yet little guidance exists on how to reduce collapse once detected. The NP-TaR codebase combines NullBench with TaRP—a tracing and reweighting pipeline—to provide an end-to-end solution: (i) measure collapse, (ii) trace training corpora for over-represented label tokens, (iii) down-weight biased documents, and (iv) fine-tune the decoder with TaRP-derived sampling weights.
+
+2. Background
+-------------
+### 2.1 NullBench Metrics
+- **Default-Class Bias (DCB):** Mean probability assigned to the most likely class under null generators. Lower is better.
+- **Null Entropy:** Entropy of the predictive distribution under null inputs. Higher implies more uncertainty (less collapse).
+- **Null Risk Score (NRS):** Measures robustness relative to collapse; higher is better.
+- **Accuracy / Recall:** Standard supervised metrics on labeled data.
+
+### 2.2 Trace-and-Reweight Pretraining (TaRP)
+TaRP traces each corpus document to count label-token matches and optional context patterns. Documents with high overlap to collapsed labels receive down-weighted sampling probabilities, while minority labels can be boosted.
+
+3. Pipeline Overview
+--------------------
+A single automation script (`run_full_pipeline.sh`) wires together the full workflow:
+1. **Baseline Evaluation:** Run dataset-specific NullBench script (e.g., `run_nullbench_ag_news.py`) and log metrics.
+2. **Tracing & Bias Scoring:** Execute `nulltrace/scripts/run_tarp_pipeline.py` using the latest NullBench results plus the dataset corpus.
+3. **Reweighted Fine-Tune:** Call `nulltrace/finetune/run_reweighted_finetune.py` with the generated sampling manifest.
+4. **Post-Finetune Evaluation:** Re-run NullBench on the new checkpoint.
+5. **Visualization:** Refresh per-task and global leaderboards via `plot_models_leaderboard.py`.
+
+4. Experimental Plan
+--------------------
+### 4.1 Datasets
+AG News, HateXplain, and SST-2 are supported with decoder-friendly instruction prompts, generator configurations, and corpora suitable for tracing.
+
+### 4.2 Models
+Evaluate base Gemma checkpoints (1B, 3B, 4B) and TaRP fine-tuned variants. Each experiment logs accuracy, recall per class, DCB, entropy, and NRS.
+
+### 4.3 Ablations
+- **Bias Threshold:** Compare τ ∈ {0.3, 0.5, 0.7} for down-weighting intensity.
+- **Minority Bonus:** Evaluate upsampling multipliers {1.0, 1.5, 2.0}.
+- **Prompt Formatting:** Test sensitivity to letter-token spacing (e.g., " A" vs "A").
+
+5. Preliminary Findings
+-----------------------
+Existing AG News results show Gemma-3-1B suffers from high DCB (0.48 overall) and low accuracy (24%). After TaRP fine-tuning, accuracy rises to 84% and DCB falls to 0.40, indicating that NullBench-guided reweighting mitigates default-class collapse without sacrificing task performance.
+
+6. Future Work
+--------------
+- Extend TaRP corpora to HateXplain and SST-2, enabling cross-domain robustness analysis.
+- Explore larger models (Gemma-3-4B) once downloads complete, benchmarking compute/quality trade-offs.
+- Integrate multilingual datasets to test the generality of tracing patterns.*
+
+7. Conclusion
+-------------
+The NP-TaR stack operationalizes a loop from collapse diagnosis (NullBench) to mitigation (TaRP) for decoder-only LMs. Packaging this loop into a reproducible pipeline provides a compelling research direction around data-centric robustness tuning.
+
+Appendix: Key Commands
+----------------------
+```
+python -m nullbench.scripts.run_nullbench_ag_news --model-name <model>
+python -m nulltrace.scripts.run_tarp_pipeline --results <...> --corpus <...>
+python -m nulltrace.finetune.run_reweighted_finetune --base-model <...>
+python -m nullbench.scripts.plot_models_leaderboard --output docs/<dataset>_leaderboard.png
+./run_full_pipeline.sh ag_news data/ag_news_corpus.jsonl
+```
