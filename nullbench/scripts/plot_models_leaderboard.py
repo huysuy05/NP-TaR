@@ -12,7 +12,7 @@ def main() -> None:
     parser.add_argument(
         "--results",
         nargs="+",
-        default=["experiments/*_results.json"],
+        default=["experiments/*/*_results.json"],
         help="Glob patterns pointing to NullBench result JSON files",
     )
     parser.add_argument(

@@ -90,21 +90,21 @@ def main():
     print(json.dumps(scores, indent=2))
 
     safe_model_name = model_name.replace("/", "_")
-    output_file = f"experiments/{safe_model_name}_ag_news_results.json"
+    output_file = f"experiments/ag_news/{safe_model_name}_ag_news_results.json"
     import os
 
-    os.makedirs("experiments", exist_ok=True)
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, "w") as f:
         json.dump(scores, f, indent=2)
-    print(f"\n✅ Results saved to: {output_file}")
+    print(f"\nResults saved to: {output_file}")
 
     # Auto-refresh dataset leaderboard plot
-    result_records = load_results_from_files(["experiments/*_results.json"])
+    result_records = load_results_from_files(["experiments/ag_news/*_results.json"])
     task_results = [record for record in result_records if record.get("task") == task.name]
     if task_results:
         leaderboard_path = f"docs/{task.name}_leaderboard.png"
         plot_metric_grid(task_results, output_path=leaderboard_path)
-        print(f"📊 Leaderboard updated: {leaderboard_path}")
+        print(f"Leaderboard updated: {leaderboard_path}")
 
 
 if __name__ == "__main__":
