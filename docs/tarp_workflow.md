@@ -17,12 +17,12 @@ flowchart LR
     E --> F[4. Post-Finetune Evaluation<br/>rerun NullBench script]
     F --> G[5. Plot Leaderboards<br/>python -m nullbench.scripts.plot_models_leaderboard]
 
-    style Inputs fill:#f3f3f3,stroke:#999
-    style C fill:#e0f7ff,stroke:#0277bd
-    style D fill:#e8f5e9,stroke:#2e7d32
-    style E fill:#fff3e0,stroke:#ef6c00
-    style F fill:#fce4ec,stroke:#ad1457
-    style G fill:#ede7f6,stroke:#4527a0
+    style Inputs fill:#fdfdfd,stroke:#666
+    style C fill:#e3f2fd,stroke:#1e88e5,color:#0d47a1
+    style D fill:#e8f5e9,stroke:#388e3c,color:#1b5e20
+    style E fill:#fff8e1,stroke:#f9a825,color:#8c6d1f
+    style F fill:#f3e5f5,stroke:#8e24aa,color:#4a148c
+    style G fill:#eceff1,stroke:#455a64,color:#263238
 ```
 
 **Step details**
