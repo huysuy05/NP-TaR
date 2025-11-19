@@ -12,6 +12,7 @@ import torch
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
+from tqdm import tqdm
 
 from nullbench.tasks.ag_news import format_ag_news_instruction, label_to_choice_text
 
@@ -201,7 +202,7 @@ def parse_args() -> argparse.Namespace:
 
 def train():
     args = parse_args()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps")
     tokenizer = AutoTokenizer.from_pretrained(args.base_model)
     pad_added = False
     if tokenizer.pad_token is None:
@@ -246,7 +247,8 @@ def train():
         model.train()
         running_loss = 0.0
         accum_counter = 0
-        for batch_idx, batch in enumerate(dataloader, start=1):
+        progress_bar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{args.epochs}")
+        for batch_idx, batch in enumerate(progress_bar, start=1):
             batch = {k: v.to(device) for k, v in batch.items()}
             outputs = model(**batch)
             loss = outputs.loss / grad_accum_steps
@@ -264,8 +266,9 @@ def train():
                 step += 1
 
                 avg_loss = running_loss / max(1, accum_counter)
+                progress_bar.set_postfix(loss=avg_loss, step=step)
                 if step % 50 == 0 or batch_idx == len(dataloader):
-                    print(f"Epoch {epoch+1}, update {step}/{total_steps}, loss={avg_loss:.4f}")
+                    tqdm.write(f"Epoch {epoch+1}, update {step}/{total_steps}, loss={avg_loss:.4f}")
 
                 running_loss = 0.0
                 accum_counter = 0

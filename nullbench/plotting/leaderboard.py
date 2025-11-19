@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import numpy as np
 
 
@@ -111,9 +112,13 @@ def plot_overall_leaderboard(
     os.makedirs(output_dir, exist_ok=True)
     labels = [f"{e['model']} · {e['task']}" for e in entries]
     values = [e["value"] for e in entries]
+    
+    model_names = [e['model'] for e in entries]
+    color_map = _get_color_map(model_names)
+    colors = [color_map[m] for m in model_names]
 
     fig, ax = plt.subplots(figsize=(8, 0.4 * len(entries) + 2))
-    ax.barh(labels, values, color="#4c72b0")
+    ax.barh(labels, values, color=colors, height=0.5)
     ax.invert_yaxis()
     ax.set_xlabel(metric)
     ax.set_title(title or f"NullBench leaderboard ({metric})")
@@ -156,9 +161,12 @@ def plot_task_leaderboards(
 
         labels = [e["model"] for e in entries]
         values = [e["value"] for e in entries]
+        
+        color_map = _get_color_map(labels)
+        colors = [color_map[l] for l in labels]
 
         fig, ax = plt.subplots(figsize=(6, 0.4 * len(entries) + 1.5))
-        ax.barh(labels, values, color="#55a868")
+        ax.barh(labels, values, color=colors, height=0.5)
         ax.invert_yaxis()
         ax.set_xlabel(metric)
         ax.set_title(f"{task} leaderboard ({metric})")
@@ -215,6 +223,10 @@ def _resolve_display_name(result: Dict[str, Any], catalog: Sequence[Tuple[str, s
         else:
             base_label = raw_model
 
+    mitigation = str(result.get("mitigation", "")).strip().lower()
+    if mitigation and mitigation != "none" and not base_label.lower().endswith(f"-{mitigation}"):
+        base_label = f"{base_label}-{mitigation}"
+
     if include_task:
         return f"{base_label} ({task})"
     return base_label
@@ -230,10 +242,10 @@ def plot_metric_grid(
 
     if metrics is None:
         metrics = [
-            ("accuracy_test", "Accuracy"),
-            ("nrs_overall", "Null Risk Score"),
-            ("dcb_overall", "Default Class Bias"),
-            ("null_entropy_overall", "Null Entropy"),
+            ("accuracy_test", "Accuracy (Higher is better)"),
+            ("nrs_overall", "Null Risk Score (Higher is better)"),
+            ("dcb_overall", "Default Class Bias (Lower is better)"),
+            ("null_entropy_overall", "Null Entropy (Higher is better)"),
         ]
 
     os.makedirs(Path(output_path).parent, exist_ok=True)
@@ -243,8 +255,12 @@ def plot_metric_grid(
     base_catalog = _build_base_catalog(results)
 
     labels = []
+    base_labels = []
     for res in results:
         labels.append(_resolve_display_name(res, base_catalog, include_task))
+        base_labels.append(_resolve_display_name(res, base_catalog, include_task=False))
+    
+    color_map = _get_color_map(base_labels)
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8), constrained_layout=True)
     axes = axes.flatten()
@@ -253,10 +269,13 @@ def plot_metric_grid(
         ax = axes[idx]
         metric_labels: List[str] = []
         metric_values: List[float] = []
-        for label, res in zip(labels, results):
+        metric_base_labels: List[str] = []
+        
+        for label, base_label, res in zip(labels, base_labels, results):
             if metric_key in res:
                 metric_labels.append(label)
                 metric_values.append(float(res[metric_key]))
+                metric_base_labels.append(base_label)
 
         if not metric_values:
             ax.set_visible(False)
@@ -265,9 +284,13 @@ def plot_metric_grid(
         order = np.argsort(metric_values)[::-1]
         ordered_values = [metric_values[i] for i in order]
         ordered_labels = [metric_labels[i] for i in order]
+        ordered_base_labels = [metric_base_labels[i] for i in order]
+        
+        bar_colors = [color_map[lbl] for lbl in ordered_base_labels]
+        
         positions = np.arange(len(ordered_labels))
 
-        ax.bar(positions, ordered_values, color="#4c72b0")
+        ax.bar(positions, ordered_values, color=bar_colors, width=0.5)
         ax.set_xticks(positions)
         ax.set_xticklabels(ordered_labels, rotation=35, ha="right")
         ax.set_ylabel(title)
@@ -281,3 +304,12 @@ def plot_metric_grid(
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
     return output_path
+
+
+def _get_color_map(keys: Sequence[str]) -> Dict[str, str]:
+    unique_keys = sorted(list(set(keys)))
+    cmap = plt.get_cmap("tab20")
+    return {
+        key: mcolors.to_hex(cmap(i % cmap.N))
+        for i, key in enumerate(unique_keys)
+    }

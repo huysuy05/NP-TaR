@@ -88,4 +88,5 @@ datasets/
 .dmypy.json
 dmypy.json
 
+# Uneccessary testing for comparisons
 experiments/

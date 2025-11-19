@@ -14,6 +14,7 @@ from nullbench.scripts.decoder_eval_utils import (
     load_decoder_model,
 )
 from nullbench.tasks.sst2 import SST2Task
+from nullbench.mitigations import MitigationConfig, build_mitigated_predict_fn
 
 
 def parse_args():
@@ -46,13 +47,35 @@ def parse_args():
         choices=["train", "validation", "test"],
         help="SST2 split to evaluate (GLUE provides validation/test)",
     )
+    parser.add_argument(
+        "--mitigation",
+        default="none",
+        choices=["none", "cc", "looc", "dc"],
+        help="Optional mitigation to wrap around the decoder logits",
+    )
+    parser.add_argument(
+        "--mitigation-generator",
+        default="placeholder",
+        help="Generator name to use for calibration references",
+    )
+    parser.add_argument(
+        "--mitigation-samples",
+        type=int,
+        default=512,
+        help="Number of reference samples for mitigation calibration",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     model_name = args.model_name
-    display_name = args.display_name or model_name
+    if args.display_name:
+        display_name = args.display_name
+    else:
+        # Use the last part of the path/name for display
+        base_display = model_name.rstrip("/").split("/")[-1]
+        display_name = f"{base_display}-{args.mitigation}" if args.mitigation != "none" else base_display
 
     print("\n" + "=" * 60)
     print(f"NULLBENCH EVALUATION: {model_name} on SST-2 ({args.split})")
@@ -84,14 +107,30 @@ def main():
         max_length=args.max_length,
         batch_size=args.batch_size,
     )
+    mitigation_config = MitigationConfig(
+        method=args.mitigation,
+        reference_generator=args.mitigation_generator,
+        sample_size=args.mitigation_samples,
+    )
+    formatter = getattr(task, "format_with_instruction", None)
+    predict_proba_fn = build_mitigated_predict_fn(
+        predict_proba_fn,
+        config=mitigation_config,
+        generators=generators,
+        task_texts=task.get_test_texts(),
+        formatter=formatter,
+    )
 
     bench = NullBench(task, generators, abstention_threshold=0.3)
     scores = bench.evaluate(predict_proba_fn)
-    scores["model"] = model_name
+    scores["model"] = model_name if args.mitigation == "none" else f"{model_name}-{args.mitigation}"
     scores["model_display_name"] = display_name
+    scores["mitigation"] = args.mitigation
     scores["task_split"] = args.split
 
     safe_model_name = model_name.replace("/", "_")
+    if args.mitigation != "none":
+        safe_model_name += f"_{args.mitigation}"
     output_file = f"experiments/sst2/{safe_model_name}_sst2_{args.split}_results.json"
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, "w") as f:
