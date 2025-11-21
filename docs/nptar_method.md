@@ -10,21 +10,21 @@ Each run logs metrics to `experiments/<TaskName>/<model>_<task>_<split>_results.
 
 ### Metrics
 
-Given null inputs \(x_i^{\text{null}}\) produced by dataset generators and model logits \(p_\theta(y=k\mid x)\):
+Given null inputs $x_i^{\text{null}}$ produced by dataset generators and model logits $p_\theta(y=k\mid x)$:
 
 - **Default-Class Bias (DCB)**
 
-  \[
+  ```math
   \text{DCB} = \frac{1}{N}\sum_{i=1}^{N} \max_k p_\theta \bigl(y = k \mid x_i^{\text{null}}\bigr)
-  \]
+  ```
 
   Measures how strongly the model collapses onto a single class when signal is absent (lower is better).
 
 - **Null Entropy**
 
-  \[
+  ```math
   H_{\text{null}} = -\frac{1}{N}\sum_{i=1}^{N}\sum_k p_\theta(y=k \mid x_i^{\text{null}})\log p_\theta(y=k \mid x_i^{\text{null}})
-  \]
+  ```
 
   Captures uncertainty on null inputs (higher is better).
 
@@ -59,7 +59,7 @@ Replace the script for AG News or SST-2 as needed. Optional flags `--mitigation 
 
 `trace_corpus` (`nulltrace/tracing/pattern_indexer.py`) streams each document and counts:
 
-- `label_counts[t]`: frequency of explicit label tokens \(t\) (e.g., `"normal"`, `"offensive"`, `"hate"`). Counts rely on whole-word regex `\b token \b`.
+- `label_counts[t]`: frequency of explicit label tokens $t$ (e.g., `"normal"`, `"offensive"`, `"hate"`). Counts rely on whole-word regex `\b token \b`.
 - `context_hits[t]`: counts of label-in-context expressions, using patterns like `"label <token>"`, `"category: <token>"`, etc. (customizable via `--context-pattern`).
 
 Each trace stores `(doc_id, text_length, label_counts, context_hits, metadata)` in `document_traces.jsonl`.
@@ -68,34 +68,34 @@ Each trace stores `(doc_id, text_length, label_counts, context_hits, metadata)` 
 
 `nulltrace/reweighting/bias_scores.py` normalizes how “default-class heavy” a document is:
 
-\[
+```math
 b_d = \frac{\sum_{t\in \mathcal{D}} c_{d,t} + \lambda \sum_{t\in \mathcal{D}} h_{d,t}}
            {\sum_{t} c_{d,t} + \lambda \sum_{t} h_{d,t}}
-\]
+```
 
-- \(c_{d,t}\): raw mentions of token \(t\) in document \(d\).
-- \(h_{d,t}\): context hits for token \(t\).
-- \(\mathcal{D}\): set of default label tokens inferred from NullBench `default_class_*` entries (or provided via `--label-token`).
-- \(\lambda = \text{context_weight}\) (default `2.0`) emphasizes structured cues such as “label: Hate”.
-- Scores are clamped to \([0, 1]\) and stored alongside metadata in `bias_scores.jsonl`.
+- $c_{d,t}$: raw mentions of token $t$ in document $d$.
+- $h_{d,t}$: context hits for token $t$.
+- $\mathcal{D}$: set of default label tokens inferred from NullBench `default_class_*` entries (or provided via `--label-token`).
+- $\lambda = \text{context_weight}$ (default `2.0`) emphasizes structured cues such as “label: Hate”.
+- Scores are clamped to `[0, 1]` and stored alongside metadata in `bias_scores.jsonl`.
 
 ### 2.3 Sampling Weight Formula
 
 `nulltrace/reweighting/sampler.py` maps each bias score to a weight:
 
-\[
-w_d = 
+```math
+w_d =
 \begin{cases}
 w_{\max}, & b_d \le \tau \\
 \max\bigl(w_{\min},\, w_{\min} + (w_{\max} - w_{\min}) \cdot \frac{1 - b_d}{1 - \tau + \epsilon}\bigr), & b_d > \tau
 \end{cases}
-\]
+```
 
 where:
 
-- \(\tau = \text{bias\_threshold}\) (default `0.5`) marks the collapse boundary.
-- \(w_{\min}\) / \(w_{\max}\) clamp the weighting range (defaults `0.1` and `1.0`).
-- `--minority-label` with `--minority-bonus` multiplies \(w_d\) by \((1 + \text{bonus})\) for documents containing specified minority labels.
+- $\tau = \text{bias\_threshold}$ (default `0.5`) marks the collapse boundary.
+- $w_{\min}$ / $w_{\max}$ clamp the weighting range (defaults `0.1` and `1.0`).
+- `--minority-label` with `--minority-bonus` multiplies $w_d$ by $(1 + \text{bonus})$ for documents containing specified minority labels.
 
 Output `reweighted_manifest.jsonl` holds `{doc_id, bias_score, sampling_weight, metadata}` per document.
 
@@ -164,8 +164,8 @@ python -m nullbench.scripts.run_nullbench_hatexplain \
 OLMo Trace (from AI2) derives document influence scores using gradient-based tracing on OLMo checkpoints. To compare against TaRP:
 
 1. **Generate TaRP bias data:** keep `bias_scores.jsonl` and `reweighted_manifest.jsonl` from the steps above.
-2. **Run OLMo Trace:** obtain per-document influence scores \(I_d\) for the same corpus (consult OLMo documentation for setup, typically via `olmo trace --corpus ...`).
-3. **Normalize for comparison:** align both measures (e.g., z-score each set) and build scatter plots of \((b_d, I_d)\) to see whether both pipelines flag the same documents.
+2. **Run OLMo Trace:** obtain per-document influence scores $I_d$ for the same corpus (consult OLMo documentation for setup, typically via `olmo trace --corpus ...`).
+3. **Normalize for comparison:** align both measures (e.g., z-score each set) and build scatter plots of $(b_d, I_d)$ to see whether both pipelines flag the same documents.
 4. **Cross-manifest testing:** convert OLMo influence scores into TaRP-compatible manifests (`{"doc_id": ..., "sampling_weight": ...}`) to reuse `run_reweighted_finetune.py` without code changes. This yields an A/B comparison:  
    - **TaRP weights:** heuristic token/context tracing.  
    - **OLMo weights:** gradient-based influence.
