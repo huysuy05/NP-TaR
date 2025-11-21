@@ -76,7 +76,7 @@ b_d = \frac{\sum_{t\in \mathcal{D}} c_{d,t} + \lambda \sum_{t\in \mathcal{D}} h_
 - $c_{d,t}$: raw mentions of token $t$ in document $d$.
 - $h_{d,t}$: context hits for token $t$.
 - $\mathcal{D}$: set of default label tokens inferred from NullBench `default_class_*` entries (or provided via `--label-token`).
-- $\lambda = \text{context_weight}$ (default `2.0`) emphasizes structured cues such as “label: Hate”.
+- $\lambda = \text{context\_weight}$ (default `2.0`) emphasizes structured cues such as “label: Hate”.
 - Scores are clamped to `[0, 1]` and stored alongside metadata in `bias_scores.jsonl`.
 
 ### 2.3 Sampling Weight Formula
